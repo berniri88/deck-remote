@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#070d18">
+  <title>MUI · Clicker Remoto</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    :root {
+      --bg: #070d18;
+      --card: #0e1726;
+      --card-border: #1e293b;
+      --lima: #aceb05;
+      --lima-glow: rgba(172, 235, 5, 0.25);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+      --success: #10b981;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; user-select: none; }
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow: hidden;
+      touch-action: manipulation;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      padding: env(safe-area-inset-top, 16px) 16px env(safe-area-inset-bottom, 20px) 16px;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      flex-shrink: 0;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--lima);
+    }
+    .brand svg { width: 18px; height: 18px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-muted);
+      transition: all 0.3s ease;
+    }
+    .badge.connected {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.3);
+      color: #34d399;
+    }
+    .badge.error {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: #f87171;
+    }
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .connected .dot {
+      box-shadow: 0 0 8px currentColor;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* Slide Info Card */
+    .info-card {
+      margin: 14px 0 16px 0;
+      padding: 16px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+    .info-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .slide-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--lima);
+      letter-spacing: -0.02em;
+    }
+    .slide-step {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .slide-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+      line-height: 1.35;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    /* Setup / Pairing Form (when no ID is present) */
+    .setup-box {
+      margin: auto 0;
+      padding: 24px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .setup-box h2 { font-size: 18px; font-weight: 700; }
+    .setup-box p { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+    .input-code {
+      width: 100%;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      background: #070d18;
+      color: var(--lima);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 20px;
+      font-weight: 700;
+      text-align: center;
+      letter-spacing: 0.1em;
+      outline: none;
+    }
+    .input-code:focus { border-color: var(--lima); box-shadow: 0 0 12px var(--lima-glow); }
+    .btn-connect {
+      padding: 14px;
+      border-radius: 12px;
+      border: none;
+      background: var(--lima);
+      color: #000;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
+    .btn-connect:active { transform: scale(0.97); }
+
+    /* Touch Controls Area */
+    .controls {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+    }
+    .btn-touch {
+      border: none;
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1), background 0.2s ease, box-shadow 0.2s ease;
+      -webkit-user-select: none;
+    }
+    .btn-touch:active {
+      transform: scale(0.96);
+    }
+
+    /* Next Button (Dominant) */
+    .btn-next {
+      flex: 1.6;
+      background: linear-gradient(135deg, #aceb05 0%, #8ac200 100%);
+      color: #050b14;
+      box-shadow: 0 12px 32px rgba(172, 235, 5, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    }
+    .btn-next:active {
+      background: #99d200;
+      box-shadow: 0 4px 16px rgba(172, 235, 5, 0.3);
+    }
+    .btn-next .btn-label {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn-next .btn-sub {
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0.75;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    /* Prev Button */
+    .btn-prev {
+      flex: 1;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+    }
+    .btn-prev:active {
+      background: #1e293b;
+      border-color: #475569;
+    }
+    .btn-prev .btn-label {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #cbd5e1;
+    }
+
+    /* Secondary Tools Bar */
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      flex-shrink: 0;
+    }
+    .tool-btn {
+      flex: 1;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .tool-btn:active { background: rgba(255, 255, 255, 0.08); color: var(--text-main); }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(14, 23, 38, 0.95);
+      border: 1px solid var(--card-border);
+      padding: 10px 18px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 100;
+      pointer-events: none;
+    }
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg>
+      <span>MUI Clicker</span>
+    </div>
+    <div id="statusBadge" class="badge">
+      <span class="dot"></span>
+      <span id="statusText">Conectando...</span>
+    </div>
+  </header>
+
+  <!-- Setup form if no Peer ID was passed in URL -->
+  <div id="setupView" class="setup-box" style="display: none;">
+    <h2>Vincular con la Mac</h2>
+    <p>Ingresá el código que figura en la pantalla de la presentación:</p>
+    <input type="text" id="manualCode" class="input-code" placeholder="MUI-XXXX" maxlength="12" autocorrect="off" autocapitalize="characters">
+    <button class="btn-connect" onclick="connectManual()">Conectar Control</button>
+  </div>
+
+  <!-- Main Clicker Controls View -->
+  <div id="clickerView" style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
+    <div class="info-card">
+      <div class="info-top">
+        <span class="slide-num" id="slideNum">-- / --</span>
+        <span class="slide-step" id="slideStep">PASO 0</span>
+      </div>
+      <div class="slide-title" id="slideTitle">Cargando diapositiva...</div>
+    </div>
+
+    <div class="controls" id="touchSurface">
+      <button class="btn-touch btn-next" onclick="sendCmd('next')" id="btnNext">
+        <div class="btn-label">
+          <span>Avanzar</span>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div class="btn-sub">Siguiente diapositiva / paso</div>
+      </button>
+
+      <button class="btn-touch btn-prev" onclick="sendCmd('prev')" id="btnPrev">
+        <div class="btn-label">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          <span>Retroceder</span>
+        </div>
+      </button>
+    </div>
+
+    <div class="toolbar">
+      <button class="tool-btn" onclick="sendCmd('home')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <span>Inicio</span>
+      </button>
+      <button class="tool-btn" onclick="sendCmd('toggleDrawer')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <span>Drawer</span>
+      </button>
+      <button class="tool-btn" onclick="reconnect()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        <span>Reconectar</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">Notificación</div>
+
+  <script>
+    let peer = null;
+    let conn = null;
+    let targetPeerId = '';
+    let wakeLock = null;
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2200);
+    }
+
+    function vibrate(ms = 35) {
+      if (window.navigator && window.navigator.vibrate) {
+        try { window.navigator.vibrate(ms); } catch (e) {}
+      }
+    }
+
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator) {
+        try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
+      }
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') requestWakeLock();
+    });
+    window.addEventListener('click', () => requestWakeLock(), { once: true });
+
+    function getTargetId() {
+      const hash = location.hash.replace(/^#/, '').trim();
+      if (hash) return hash;
+      const urlParams = new URLSearchParams(location.search);
+      return urlParams.get('peer') || urlParams.get('id') || '';
+    }
+
+    function updateStatus(state, label) {
+      const badge = document.getElementById('statusBadge');
+      const text = document.getElementById('statusText');
+      badge.className = 'badge ' + state;
+      text.textContent = label;
+    }
+
+    function initPeer() {
+      targetPeerId = getTargetId();
+      if (!targetPeerId) {
+        document.getElementById('setupView').style.display = 'flex';
+        document.getElementById('clickerView').style.display = 'none';
+        updateStatus('', 'Esperando código');
+        return;
+      }
+
+      document.getElementById('setupView').style.display = 'none';
+      document.getElementById('clickerView').style.display = 'flex';
+      updateStatus('', 'Conectando...');
+
+      if (peer) {
+        try { peer.destroy(); } catch (e) {}
+      }
+
+      peer = new Peer(null, {
+        debug: 1,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        }
+      });
+
+      peer.on('open', (id) => {
+        connectToHost(targetPeerId);
+      });
+
+      peer.on('error', (err) => {
+        console.error('Peer error:', err);
+        updateStatus('error', 'Error WebRTC');
+        showToast('Error de conexión: ' + (err.type || 'desconocido'));
+      });
+    }
+
+    function connectToHost(hostId) {
+      updateStatus('', 'Emparejando...');
+      conn = peer.connect(hostId, { reliable: true });
+
+      conn.on('open', () => {
+        updateStatus('connected', 'Conectado');
+        vibrate([40, 60, 40]);
+        showToast('🟢 Vinculado a la presentación');
+        conn.send({ action: 'sync' });
+      });
+
+      conn.on('data', (data) => {
+        handleHostData(data);
+      });
+
+      conn.on('close', () => {
+        updateStatus('error', 'Desconectado');
+        showToast('🔴 Se perdió conexión con la Mac');
+      });
+
+      conn.on('error', (err) => {
+        console.error('Conn error:', err);
+        updateStatus('error', 'Fallo conexión');
+      });
+    }
+
+    function handleHostData(data) {
+      if (typeof data === 'object') {
+        if (data.slide !== undefined && data.total !== undefined) {
+          const s = String(data.slide + 1).padStart(2, '0');
+          const t = String(data.total).padStart(2, '0');
+          document.getElementById('slideNum').textContent = `${s} / ${t}`;
+        }
+        if (data.title) {
+          document.getElementById('slideTitle').textContent = data.title;
+        }
+        if (data.step !== undefined && data.steps !== undefined) {
+          document.getElementById('slideStep').textContent = data.steps > 0 
+            ? `Paso ${data.step} de ${data.steps}` 
+            : `Vista general`;
+        }
+      }
+    }
+
+    function sendCmd(action) {
+      vibrate(action === 'next' ? 30 : 20);
+      if (conn && conn.open) {
+        conn.send({ action });
+      } else {
+        showToast('⚠️ No conectado aún');
+        reconnect();
+      }
+    }
+
+    function connectManual() {
+      const code = document.getElementById('manualCode').value.trim();
+      if (!code) {
+        showToast('Ingresá el código');
+        return;
+      }
+      location.hash = code;
+      initPeer();
+    }
+
+    function reconnect() {
+      updateStatus('', 'Reintentando...');
+      if (targetPeerId) {
+        if (peer && !peer.destroyed) {
+          connectToHost(targetPeerId);
+        } else {
+          initPeer();
+        }
+      } else {
+        initPeer();
+      }
+    }
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    const surface = document.getElementById('touchSurface');
+    surface.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    surface.addEventListener('touchend', (e) => {
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      if (Math.abs(dx) > 60 && Math.abs(dy) < 50) {
+        if (dx < 0) sendCmd('next');
+        else sendCmd('prev');
+      }
+    }, { passive: true });
+
+    window.addEventListener('load', () => {
+      initPeer();
+    });
+  </script>
+</body>
+</html>
