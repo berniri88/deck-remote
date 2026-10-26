@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
     :root {
       --bg: #070d18;
@@ -38,7 +38,6 @@
       padding: env(safe-area-inset-top, 16px) 16px env(safe-area-inset-bottom, 20px) 16px;
     }
 
-    /* Header */
     header {
       display: flex;
       align-items: center;
@@ -57,7 +56,6 @@
       text-transform: uppercase;
       color: var(--lima);
     }
-    .brand svg { width: 18px; height: 18px; }
     .badge {
       display: inline-flex;
       align-items: center;
@@ -94,7 +92,6 @@
     }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-    /* Slide Info Card */
     .info-card {
       margin: 14px 0 16px 0;
       padding: 16px;
@@ -137,7 +134,6 @@
       -webkit-box-orient: vertical;
     }
 
-    /* Setup / Pairing Form (when no ID is present) */
     .setup-box {
       margin: auto 0;
       padding: 24px;
@@ -175,11 +171,8 @@
       font-size: 15px;
       font-weight: 700;
       cursor: pointer;
-      transition: transform 0.15s ease, opacity 0.15s ease;
     }
-    .btn-connect:active { transform: scale(0.97); }
 
-    /* Touch Controls Area */
     .controls {
       flex: 1;
       display: flex;
@@ -205,7 +198,6 @@
       transform: scale(0.96);
     }
 
-    /* Next Button (Dominant) */
     .btn-next {
       flex: 1.6;
       background: linear-gradient(135deg, #aceb05 0%, #8ac200 100%);
@@ -217,7 +209,7 @@
       box-shadow: 0 4px 16px rgba(172, 235, 5, 0.3);
     }
     .btn-next .btn-label {
-      font-size: 20px;
+      font-size: 22px;
       font-weight: 800;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -233,7 +225,6 @@
       letter-spacing: 0.04em;
     }
 
-    /* Prev Button */
     .btn-prev {
       flex: 1;
       background: var(--card);
@@ -255,7 +246,6 @@
       color: #cbd5e1;
     }
 
-    /* Secondary Tools Bar */
     .toolbar {
       display: flex;
       gap: 10px;
@@ -279,7 +269,6 @@
     }
     .tool-btn:active { background: rgba(255, 255, 255, 0.08); color: var(--text-main); }
 
-    /* Toast Notification */
     .toast {
       position: fixed;
       bottom: 24px;
@@ -307,7 +296,7 @@
 
   <header>
     <div class="brand">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <polygon points="5 3 19 12 5 21 5 3"/>
       </svg>
       <span>MUI Clicker</span>
@@ -318,7 +307,7 @@
     </div>
   </header>
 
-  <!-- Setup form if no Peer ID was passed in URL -->
+  <!-- Setup form if no Room ID was passed in URL -->
   <div id="setupView" class="setup-box" style="display: none;">
     <h2>Vincular con la Mac</h2>
     <p>Ingresá el código que figura en la pantalla de la presentación:</p>
@@ -333,7 +322,7 @@
         <span class="slide-num" id="slideNum">-- / --</span>
         <span class="slide-step" id="slideStep">PASO 0</span>
       </div>
-      <div class="slide-title" id="slideTitle">Cargando diapositiva...</div>
+      <div class="slide-title" id="slideTitle">Sincronizando diapositiva...</div>
     </div>
 
     <div class="controls" id="touchSurface">
@@ -362,7 +351,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         <span>Drawer</span>
       </button>
-      <button class="tool-btn" onclick="reconnect()">
+      <button class="tool-btn" onclick="connectMQTT()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         <span>Reconectar</span>
       </button>
@@ -372,9 +361,8 @@
   <div id="toast" class="toast">Notificación</div>
 
   <script>
-    let peer = null;
-    let conn = null;
-    let targetPeerId = '';
+    let client = null;
+    let roomCode = '';
     let wakeLock = null;
 
     function showToast(msg) {
@@ -400,11 +388,11 @@
     });
     window.addEventListener('click', () => requestWakeLock(), { once: true });
 
-    function getTargetId() {
+    function getRoomCode() {
       const hash = location.hash.replace(/^#/, '').trim();
-      if (hash) return hash;
+      if (hash) return hash.toLowerCase();
       const urlParams = new URLSearchParams(location.search);
-      return urlParams.get('peer') || urlParams.get('id') || '';
+      return (urlParams.get('room') || urlParams.get('peer') || urlParams.get('id') || '').toLowerCase();
     }
 
     function updateStatus(state, label) {
@@ -414,9 +402,9 @@
       text.textContent = label;
     }
 
-    function initPeer() {
-      targetPeerId = getTargetId();
-      if (!targetPeerId) {
+    function connectMQTT() {
+      roomCode = getRoomCode();
+      if (!roomCode) {
         document.getElementById('setupView').style.display = 'flex';
         document.getElementById('clickerView').style.display = 'none';
         updateStatus('', 'Esperando código');
@@ -427,54 +415,54 @@
       document.getElementById('clickerView').style.display = 'flex';
       updateStatus('', 'Conectando...');
 
-      if (peer) {
-        try { peer.destroy(); } catch (e) {}
+      if (client) {
+        try { client.end(true); } catch (e) {}
       }
 
-      peer = new Peer(null, {
-        debug: 1,
-        config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
+      const clientId = 'mui_phone_' + Math.random().toString(16).substring(2, 10);
+      client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
+        clientId: clientId,
+        clean: true,
+        connectTimeout: 5000,
+        reconnectPeriod: 2000
+      });
+
+      const topicCmd = `mui/deck/${roomCode}/cmd`;
+      const topicState = `mui/deck/${roomCode}/state`;
+      const topicPing = `mui/deck/${roomCode}/ping`;
+
+      client.on('connect', () => {
+        updateStatus('connected', 'Conectado');
+        vibrate([30, 40, 30]);
+        showToast('🟢 Vinculado a la presentación');
+
+        // Escuchar el estado de las diapositivas
+        client.subscribe(topicState, { qos: 0 });
+
+        // Enviar ping inicial a la Mac para que sepa que estamos conectados y nos devuelva el estado
+        client.publish(topicPing, JSON.stringify({ t: Date.now(), client: 'phone' }));
+      });
+
+      client.on('message', (topic, message) => {
+        if (topic === topicState) {
+          try {
+            const data = JSON.parse(message.toString());
+            handleHostData(data);
+          } catch (e) {}
         }
       });
 
-      peer.on('open', (id) => {
-        connectToHost(targetPeerId);
+      client.on('reconnect', () => {
+        updateStatus('', 'Reconectando...');
       });
 
-      peer.on('error', (err) => {
-        console.error('Peer error:', err);
-        updateStatus('error', 'Error WebRTC');
-        showToast('Error de conexión: ' + (err.type || 'desconocido'));
-      });
-    }
-
-    function connectToHost(hostId) {
-      updateStatus('', 'Emparejando...');
-      conn = peer.connect(hostId, { reliable: true });
-
-      conn.on('open', () => {
-        updateStatus('connected', 'Conectado');
-        vibrate([40, 60, 40]);
-        showToast('🟢 Vinculado a la presentación');
-        conn.send({ action: 'sync' });
-      });
-
-      conn.on('data', (data) => {
-        handleHostData(data);
-      });
-
-      conn.on('close', () => {
+      client.on('close', () => {
         updateStatus('error', 'Desconectado');
-        showToast('🔴 Se perdió conexión con la Mac');
       });
 
-      conn.on('error', (err) => {
-        console.error('Conn error:', err);
-        updateStatus('error', 'Fallo conexión');
+      client.on('error', (err) => {
+        console.error('MQTT error:', err);
+        updateStatus('error', 'Error red');
       });
     }
 
@@ -498,11 +486,11 @@
 
     function sendCmd(action) {
       vibrate(action === 'next' ? 30 : 20);
-      if (conn && conn.open) {
-        conn.send({ action });
+      if (client && client.connected) {
+        client.publish(`mui/deck/${roomCode}/cmd`, action);
       } else {
-        showToast('⚠️ No conectado aún');
-        reconnect();
+        showToast('⚠️ Reconectando...');
+        connectMQTT();
       }
     }
 
@@ -512,23 +500,11 @@
         showToast('Ingresá el código');
         return;
       }
-      location.hash = code;
-      initPeer();
+      location.hash = code.toLowerCase();
+      connectMQTT();
     }
 
-    function reconnect() {
-      updateStatus('', 'Reintentando...');
-      if (targetPeerId) {
-        if (peer && !peer.destroyed) {
-          connectToHost(targetPeerId);
-        } else {
-          initPeer();
-        }
-      } else {
-        initPeer();
-      }
-    }
-
+    // Touch Swipe Detection
     let touchStartX = 0;
     let touchStartY = 0;
     const surface = document.getElementById('touchSurface');
@@ -547,7 +523,7 @@
     }, { passive: true });
 
     window.addEventListener('load', () => {
-      initPeer();
+      connectMQTT();
     });
   </script>
 </body>
